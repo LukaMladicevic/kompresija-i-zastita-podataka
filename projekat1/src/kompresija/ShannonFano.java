@@ -55,10 +55,13 @@ public final class ShannonFano {
 
         int mid = lo;
         long best = Long.MAX_VALUE;
-        long running = 0;
+        long left = 0;
+
         for (int i = lo; i < hi; i++) {
-            running += counts[symbols[i]];
-            long diff = Math.abs(2 * running - total);
+            left = left + counts[symbols[i]];
+            long right = total - left;
+            long diff = Math.abs(left - right);
+
             if (diff < best) {
                 best = diff;
                 mid = i;
