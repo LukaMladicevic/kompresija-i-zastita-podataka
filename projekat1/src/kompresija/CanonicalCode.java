@@ -65,10 +65,10 @@ public final class CanonicalCode {
 
         int maxLen = maxLength(lengths);
 
-        int[] countPerLength = new int[maxLen + 1];
+        int[] symbolsPerLength = new int[maxLen + 1];
         for (int len : lengths) {
             if (len > 0) {
-                countPerLength[len]++;
+                symbolsPerLength[len]++;
             }
         }
 
@@ -79,8 +79,8 @@ public final class CanonicalCode {
         for (int len = 1; len <= maxLen; len++) {
             firstCode[len] = code;
             firstIndex[len] = index;
-            index += countPerLength[len];
-            code = (code + countPerLength[len]) << 1;
+            index += symbolsPerLength[len];
+            code = (code + symbolsPerLength[len]) << 1;
         }
 
         int[] sorted = new int[index];
@@ -101,7 +101,7 @@ public final class CanonicalCode {
                 current = (current << 1) | r.readBit();
                 int offset = current - firstCode[len];
 
-                if (offset >= 0 && offset < countPerLength[len]) {
+                if (offset >= 0 && offset < symbolsPerLength[len]) {
                     symbol = sorted[firstIndex[len] + offset];
                     break;
                 }

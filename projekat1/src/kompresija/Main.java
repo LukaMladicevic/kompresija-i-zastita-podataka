@@ -32,28 +32,38 @@ public class Main {
         System.out.printf("N*H/8 bajtova:      %.1f%n", n * h / 8.0);
         System.out.println();
 
-        int[] lengths = ShannonFano.lengths(counts);
-        Path encoded = Path.of(INPUT_FILE + ".sf");
+        System.out.printf("%-14s %9s %7s %11s %9s %10s %12s %9s%n",
+                "metod", "kodiran", "header", "bita/bajt", "usteda", "kodiranje", "dekodiranje", "provera");
+        System.out.println("-".repeat(90));
+
+        report("Shannon-Fano", Header.SHANNON_FANO, ShannonFano.lengths(counts), data, ".sf");
+        report("Huffman", Header.HUFFMAN, Huffman.lengths(counts), data, ".huf");
+    }
+
+    private static void report(String name, int method, int[] lengths, byte[] data, String suffix) throws IOException {
+        Path encoded = Path.of(INPUT_FILE + suffix);
+        long n = data.length;
 
         long start = System.nanoTime();
-        encodeCanonical(data, lengths, Header.SHANNON_FANO, encoded);
+        encodeCanonical(data, lengths, method, encoded);
         double encodeSeconds = (System.nanoTime() - start) / 1e9;
 
         start = System.nanoTime();
         byte[] decoded = decodeCanonical(encoded);
         double decodeSeconds = (System.nanoTime() - start) / 1e9;
 
-        long encodedSize = Files.size(encoded);
-        int headerSize = Header.SIZE_IN_BYTES + CanonicalCode.TABLE_BYTES;
+        long size = Files.size(encoded);
+        int header = Header.SIZE_IN_BYTES + CanonicalCode.TABLE_BYTES;
 
-        System.out.println("SHANNON-FANO");
-        System.out.printf("  najduza kodna rec:  %d bita%n", CanonicalCode.maxLength(lengths));
-        System.out.printf("  kodiran fajl:       %d bajtova (header %d)%n", encodedSize, headerSize);
-        System.out.printf("  bita po bajtu (L):  %.6f%n", n == 0 ? 0.0 : encodedSize * 8.0 / n);
-        System.out.printf("  usteda:             %.2f%%%n", n == 0 ? 0.0 : 100.0 * (1 - (double) encodedSize / n));
-        System.out.printf("  kodiranje:          %.3f s%n", encodeSeconds);
-        System.out.printf("  dekodiranje:        %.3f s%n", decodeSeconds);
-        System.out.printf("  verifikacija:       %s%n", Arrays.equals(data, decoded) ? "OK" : "GRESKA");
+        System.out.printf("%-14s %9d %7d %11s %9s %8.3f s %10.3f s %9s%n",
+                name,
+                size,
+                header,
+                n == 0 ? "-" : String.format("%.4f", size * 8.0 / n),
+                n == 0 ? "-" : String.format("%.2f%%", 100.0 * (1 - (double) size / n)),
+                encodeSeconds,
+                decodeSeconds,
+                Arrays.equals(data, decoded) ? "OK" : "GRESKA");
     }
 
     private static void encodeCanonical(byte[] data, int[] lengths, int method, Path out) throws IOException {
