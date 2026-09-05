@@ -9,6 +9,11 @@ public class Main {
     private static final int ROW_WEIGHT = 5;
     private static final int COLUMN_WEIGHT = 3;
 
+    private static final double THRESHOLD_ZERO = 0.5;
+    private static final double THRESHOLD_ONE = 0.5;
+    private static final int MAX_ITERATIONS = 50;
+    private static final int SHOWN_ITERATIONS = 4;
+
     public static void main(String[] args) {
         System.out.println("seed: " + INDEX);
         System.out.println("n = " + N + ", n-k = " + ROWS
@@ -22,6 +27,181 @@ public class Main {
         printRank(h, codewords);
         printDistance(h, codewords);
         printSyndromeTable(h, codewords);
+        printGallagerB(h, codewords);
+        printFailingError(h, codewords);
+    }
+
+    private static void printGallagerB(long[] h, int[] codewords) {
+        System.out.println("\nGALLAGER B");
+        System.out.println("th_0 = " + THRESHOLD_ZERO + ", th_1 = " + THRESHOLD_ONE
+                + ", maxIter = " + MAX_ITERATIONS + "   (prag: 2 od 3)");
+
+        trace(h, ParityCheckMatrix.setBit(0, 0));
+        trace(h, firstCorrectableError(h));
+
+        boolean codewordsOk = true;
+        for (int codeword : codewords) {
+            if (decodeGallager(h, codeword) != codeword) {
+                codewordsOk = false;
+            }
+        }
+
+        boolean alwaysCodeword = true;
+        for (int received = 0; received < LinearCode.twoTo(N); received++) {
+            int result = decodeGallager(h, received);
+
+            if (result != GallagerB.NOT_DECODED && LinearCode.syndrome(h, result) != 0) {
+                alwaysCodeword = false;
+            }
+        }
+
+        System.out.println("\nprovera: " + (codewordsOk && alwaysCodeword ? "OK" : "GRESKA"));
+    }
+
+    private static void printFailingError(long[] h, int[] codewords) {
+        int failing = lightestFailingError(h);
+        int failWeight = LinearCode.weight(failing);
+        int distance = LinearCode.weight(LinearCode.lightestCodeword(codewords));
+
+        System.out.println("\nNAJLAKSA GRESKA KOJU GALLAGER B NE ISPRAVLJA");
+        System.out.println("\nw_fail = " + failWeight);
+        System.out.println("e = " + bits(failing, N) + "   bitovi " + positions(failing));
+        System.out.println("ishod: " + (decodeGallager(h, failing) == GallagerB.NOT_DECODED
+                ? "ne konvergira" : "konvergira na pogresnu kodnu rec"));
+
+        System.out.println("\nd(C) = " + distance
+                + ", pa kod garantuje ispravljanje (d-1)/2 = " + ((distance - 1) / 2) + " gresaka");
+        System.out.println("w_fail = " + failWeight
+                + ", pa ni Gallager B ne ispravlja sve greske te tezine");
+
+        printFourCycles(h, failing);
+        printFailureCounts(h);
+
+        boolean lighterAllCorrected = true;
+        for (int error = 0; error < LinearCode.twoTo(N); error++) {
+            if (LinearCode.weight(error) < failWeight && decodeGallager(h, error) != 0) {
+                lighterAllCorrected = false;
+            }
+        }
+        boolean reallyFails = decodeGallager(h, failing) != 0;
+
+        System.out.println("\nprovera: " + (lighterAllCorrected && reallyFails ? "OK" : "GRESKA"));
+    }
+
+    private static int lightestFailingError(long[] h) {
+        for (int weight = 1; weight <= N; weight++) {
+            for (int error = 0; error < LinearCode.twoTo(N); error++) {
+                if (LinearCode.weight(error) == weight && decodeGallager(h, error) != 0) {
+                    return error;
+                }
+            }
+        }
+        return 0;
+    }
+
+    private static void printFourCycles(long[] h, int failing) {
+        int cycles = 0;
+        int withoutPartner = 0;
+
+        for (int first = 0; first < N; first++) {
+            boolean hasPartner = false;
+
+            for (int second = 0; second < N; second++) {
+                if (second != first && ParityCheckMatrix.sharedChecks(h, first, second) >= 2) {
+                    hasPartner = true;
+
+                    if (second > first) {
+                        cycles++;
+                    }
+                }
+            }
+
+            if (!hasPartner) {
+                withoutPartner++;
+            }
+        }
+
+        System.out.println("\nparova kolona sa >= 2 zajednicke provere (4-ciklusi): " + cycles);
+        System.out.println("kolona bez takvog partnera: " + withoutPartner);
+
+        for (int bit = 0; bit < N; bit++) {
+            if (ParityCheckMatrix.bit(failing, bit) == 0) {
+                continue;
+            }
+
+            StringBuilder partners = new StringBuilder();
+            for (int other = 0; other < N; other++) {
+                if (other != bit && ParityCheckMatrix.sharedChecks(h, bit, other) >= 2) {
+                    if (partners.length() > 0) {
+                        partners.append(", ");
+                    }
+                    partners.append(other);
+                }
+            }
+            System.out.println("partneri bita " + bit + " u 4-ciklusu: " + partners);
+        }
+    }
+
+    private static void printFailureCounts(long[] h) {
+        int[] failed = new int[N + 1];
+        int[] total = new int[N + 1];
+
+        for (int error = 0; error < LinearCode.twoTo(N); error++) {
+            int weight = LinearCode.weight(error);
+            total[weight]++;
+
+            if (decodeGallager(h, error) != 0) {
+                failed[weight]++;
+            }
+        }
+
+        System.out.println("\nneispravljene greske po tezini:");
+        for (int weight = 0; weight <= N; weight++) {
+            System.out.println("tezina " + weight + ": " + failed[weight] + " od " + total[weight]);
+        }
+    }
+
+    private static void trace(long[] h, int error) {
+        System.out.println("\nposlato:   " + bits(0, N));
+        System.out.println("greska:    " + bits(error, N)
+                + "   tezina " + LinearCode.weight(error)
+                + ", bitovi " + positions(error));
+
+        int current = error;
+        for (int iteration = 1; iteration <= SHOWN_ITERATIONS; iteration++) {
+            if (LinearCode.syndrome(h, current) == 0) {
+                break;
+            }
+
+            int next = GallagerB.oneIteration(h, N, error, current, THRESHOLD_ZERO, THRESHOLD_ONE);
+
+            System.out.println("iteracija " + iteration + ": " + bits(next, N)
+                    + "   prevrnuti bitovi: " + positions(current ^ next));
+            current = next;
+        }
+
+        int result = decodeGallager(h, error);
+
+        if (result == GallagerB.NOT_DECODED) {
+            System.out.println("ishod: ne konvergira ni posle " + MAX_ITERATIONS + " iteracija");
+        } else if (result == 0) {
+            System.out.println("ishod: ispravljeno, vracena poslata rec");
+        } else {
+            System.out.println("ishod: konvergirao na pogresnu kodnu rec " + bits(result, N));
+        }
+    }
+
+    private static int firstCorrectableError(long[] h) {
+        for (int error = 1; error < LinearCode.twoTo(N); error++) {
+            if (decodeGallager(h, error) == 0) {
+                return error;
+            }
+        }
+        return 0;
+    }
+
+    private static int decodeGallager(long[] h, int received) {
+        return GallagerB.decode(h, N, received, MAX_ITERATIONS, THRESHOLD_ZERO, THRESHOLD_ONE);
     }
 
     private static void printSyndromeTable(long[] h, int[] codewords) {
@@ -42,13 +222,13 @@ public class Main {
         printCorrectorWeights(corrector);
 
         boolean leadersOk = true;
-        for (int syndrome = 0; syndrome < corrector.length; syndrome++) {
-            if (corrector[syndrome] == SyndromeTable.UNREACHABLE) {
+        for (int correction : corrector) {
+            if (correction == SyndromeTable.UNREACHABLE) {
                 continue;
             }
 
             for (int codeword : codewords) {
-                int received = codeword ^ corrector[syndrome];
+                int received = codeword ^ correction;
 
                 if (SyndromeTable.decode(h, corrector, received) != codeword) {
                     leadersOk = false;

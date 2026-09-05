@@ -1,0 +1,180 @@
+PROJEKAT 2 - LDPC
+-----------------
+
+Parametri: n = 15, n-k = 9, w_r = 5, w_c = 3, th_0 = th_1 = 0.5
+Seed za generator pseudoslucajnih brojeva je broj indeksa
+Svi brojevi u ovom izvestaju vaze za taj seed
+
+
+MATRICA H
+---------
+
+red 0   1 1 1 1 1 0 0 0 0 0 0 0 0 0 0
+red 1   0 0 0 0 0 1 1 1 1 1 0 0 0 0 0
+red 2   0 0 0 0 0 0 0 0 0 0 1 1 1 1 1
+red 3   0 0 1 1 0 0 0 0 0 1 0 0 0 1 1
+red 4   0 1 0 0 1 1 0 0 0 0 0 1 1 0 0
+red 5   1 0 0 0 0 0 1 1 1 0 1 0 0 0 0
+red 6   0 1 0 0 0 1 0 0 0 0 0 1 1 1 0
+red 7   0 0 0 0 1 0 1 1 0 1 1 0 0 0 0
+red 8   1 0 1 1 0 0 0 0 1 0 0 0 0 0 1
+
+Gallagerov metod: 9 redova podeljeno na w_c = 3 grupe po 3 reda.
+Prva grupa je blok-dijagonalna, red 0 pokriva kolone 0-4, red 1 kolone 5-9,
+red 2 kolone 10-14. Druga i treca grupa su permutacije kolona prve grupe
+
+Svaka kolona ima tacno jednu jedinicu po grupi, pa je w_c = 3 automatski
+Svaki red ima tacno 5 jedinica. Ukupno 45 = 9*5 = 15*3.
+
+
+REZULTATI
+---------
+
+  rank(H)                     7
+  k = n - rank                8
+  broj kodnih reci            256   (2^8)
+  d(C)                        2
+  dostiznih sindroma          128   (od 512 mogucih)
+  w_fail                      1
+
+
+rank(H) = 7, ne 9
+
+Unutar svake grupe tri reda disjunktno pokrivaju svih 15 kolona, pa je zbir
+redova svake grupe vektor svih jedinica. Tri grupe daju isti vektor, sto je
+dve nezavisne zavisnosti medju redovima. Zato je rank = 9 - 2 = 7, k = 8 i
+kod ima 256 kodnih reci, a ne 64
+
+Posledica je i da je dostiznih sindroma 2^7 = 128, a ne 2^9 = 512
+Preostalih 384 mesta u tabeli su oznacena kao nedostizna
+
+
+d(C) = 2
+
+Najlaksa nenulta kodna rec je 001100000000000, jedinice na pozicijama 2 i 3
+Kolone 2 i 3 matrice H su identicne, pa im je XOR nula, sto je upravo uslov
+H*x^T = 0 za vektor sa jedinicama samo na te dve pozicije
+
+Identicni parovi kolona: (2,3), (6,7), (11,12)
+
+Razlog je sto je kolona odredjena trojkom (red u grupi 1, grupi 2, grupi 3),
+sto daje 27 mogucih obrazaca za 15 kolona, pa se duplikati javljaju
+
+Kod sa d(C) = 2 detektuje d-1 = 1 gresku, a garantuje ispravljanje
+(d-1)/2 = 0 gresaka.
+
+
+TABELA SINDROM - KOREKTOR
+-------------------------
+
+Za svaki dostizan sindrom pamti se najlaksa greska koja ga proizvodi.
+Dekodiranje je jedan pogodak u niz: x = y XOR korektor[sindrom(y)]
+Tabelu u celosti (128 redova) ispisuje program.
+
+Korektori po tezini:
+
+  tezina 0:    1
+  tezina 1:   12
+  tezina 2:   51
+  tezina 3:   52
+  tezina 4:   12
+
+Korektora tezine 1 ima 12, a ne 15, jer tri para identicnih kolona daju
+po dva ista sindroma, pa 15 jednostrukih gresaka pokriva samo 12 sindroma
+
+
+GALLAGER B
+----------
+
+th_0 = th_1 = 0.5, w_c = 3, pa je prag 0.5 * 3 = 1.5, tj. potrebno je
+najmanje 2 od 3 poruke. maxIter = 50
+
+Poruka provere ka bitu j iskljucuje sam bit j: omega_i XOR x_j
+Svi bitovi se azuriraju istovremeno, u novi niz. Primljeni vektor y ostaje
+netaknut kroz sve iteracije. Provera zaustavljanja ide pre azuriranja
+
+Grana koja vraca vrednost iz kanala se nikad ne izvrsava jer je stepen 3
+neparan, pa jedna strana uvek ima bar 2 glasa. Ostavljena je radi opstosti
+
+Trag za gresku u bitu 0:
+
+  primljeno    100000000000000
+  iteracija 1  001100001000000   prevrnuti bitovi 0, 2, 3, 8
+  iteracija 2  101100110000000   prevrnuti bitovi 0, 6, 7, 8
+  iteracija 3  000000111000000   prevrnuti bitovi 0, 2, 3, 8
+  iteracija 4  100000000000000   prevrnuti bitovi 0, 6, 7, 8
+
+Bit 0 se ispravi u prvoj iteraciji, ali se istovremeno prevrnu bitovi 2, 3
+i 8, koji su bili tacni. Dalje se stanje ponavlja sa periodom 2 i dekoder
+ne konvergira
+
+
+TACKA 4 - NAJLAKSA GRESKA KOJU GALLAGER B NE ISPRAVLJA
+------------------------------------------------------
+
+  w_fail = 1
+  e = 100000000000000   (greska u bitu 0)
+  ishod: ne konvergira ni posle 50 iteracija
+
+Pretraga ide po rastucoj tezini i staje na prvom neuspehu. Pretpostavlja se
+poslata nulta kodna rec, sto je dozvoljeno jer je s = H*y^T = H*e^T, dakle
+sindrom zavisi samo od greske a ne od poslate reci.
+
+Neuspehom se smatraju oba slucaja: da dekoder ne konvergira i da konvergira
+na pogresnu kodnu rec.
+
+Razlog neuspeha su 4-ciklusi u Tanner grafu, tj. parovi kolona koje dele
+dve ili tri provere. Takvih parova ima 23 i nijedna kolona nije bez partnera,
+pa pada svih 15 jednostrukih gresaka. Bit 0 ima partnere 2, 3 i 8 i bas njih
+prevrne u prvoj iteraciji
+
+Neispravljene greske po tezini:
+
+  tezina  0:     0 od     1
+  tezina  1:    15 od    15
+  tezina  2:   104 od   105
+  tezina  3:   453 od   455
+  tezina  4:  1363 od  1365
+  tezina  5:  3003 od  3003
+  tezina  6:  5005 od  5005
+  tezina  7:  6435 od  6435
+  tezina  8:  6435 od  6435
+  tezina  9:  5005 od  5005
+  tezina 10:  3003 od  3003
+  tezina 11:  1363 od  1365
+  tezina 12:   453 od   455
+  tezina 13:   104 od   105
+  tezina 14:    15 od    15
+  tezina 15:     0 od     1
+
+Histogram je simetrican jer svaka provera ima 5 jedinica, dakle neparan broj
+Za vektor svih jedinica sve provere padnu i svi bitovi u jednom koraku dobiju
+poruku da postanu 0, pa se e i njegov komplement ponasaju isto
+
+Poredjenje sa kodnim rastojanjem:
+
+  d(C) = 2  ->  kod garantuje ispravljanje (d-1)/2 = 0 gresaka
+  w_fail = 1
+
+Gallager B pada na istoj tezini na kojoj i kod gubi garanciju. Kolone 2 i 3
+su identicne, pa greska u bitu 2 i greska u bitu 3 daju isti sindrom i nijedan
+dekoder ih ne razlikuje. Razlika je u tome sto tabela sindroma bar vrati
+susednu kodnu rec, dok Gallager B kod bita 0 ne vrati nista
+
+
+PROVERE
+-------
+
+Pri svakom pokretanju se ispisuje pet provera:
+
+  1. tezine redova i kolona su w_r = 5 i w_c = 3, ukupno 45 jedinica
+  2. broj kodnih reci je 2^(n-rank), i zbir svake grupe redova je vektor
+     svih jedinica
+  3. XOR kolona H na pozicijama najlaksje kodne reci je nula
+  4. tabela sindroma: za svih 128 korektora i svih 256 kodnih reci
+     dekodiranje vraca poslatu rec; za svih 2^15 primljenih vektora
+     rezultat je kodna rec
+  5. Gallager B: 256 kodnih reci prolazi nepromenjeno; kad god dekoder
+     nesto vrati, to je kodna rec; sve greske lakse od w_fail su ispravljene
+
+Vreme celog pokretanja je oko 2.8 s

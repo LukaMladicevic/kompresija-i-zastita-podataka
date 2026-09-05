@@ -101,7 +101,7 @@ public final class LinearCode {
         return -1;
     }
 
-    private static int parity(long value) {
+    public static int parity(long value) {
         return Long.bitCount(value) % 2;
     }
 }

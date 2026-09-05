@@ -73,6 +73,10 @@ public final class ParityCheckMatrix {
         return mask;
     }
 
+    public static int sharedChecks(long[] h, int firstColumn, int secondColumn) {
+        return Integer.bitCount(column(h, firstColumn) & column(h, secondColumn));
+    }
+
     public static int columnWeight(long[] h, int column) {
         int weight = 0;
 
