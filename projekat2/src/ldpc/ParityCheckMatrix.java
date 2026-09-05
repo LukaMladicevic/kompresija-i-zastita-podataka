@@ -50,12 +50,27 @@ public final class ParityCheckMatrix {
         return row | (1L << column);
     }
 
+    public static int setBit(int value, int position) {
+        return value | (1 << position);
+    }
+
     public static int bit(long row, int column) {
         return (int) ((row >>> column) & 1);
     }
 
     public static int rowWeight(long row) {
         return Long.bitCount(row);
+    }
+
+    public static int column(long[] h, int column) {
+        int mask = 0;
+
+        for (int row = 0; row < h.length; row++) {
+            if (bit(h[row], column) == 1) {
+                mask = setBit(mask, row);
+            }
+        }
+        return mask;
     }
 
     public static int columnWeight(long[] h, int column) {
