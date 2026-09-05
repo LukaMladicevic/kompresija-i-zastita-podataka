@@ -74,7 +74,6 @@ public final class LZW {
         int maxEntries = capacityFor(maxWidth);
         int[] prefix = new int[maxEntries];
         int[] suffix = new int[maxEntries];
-        int[] stack = new int[maxEntries];
 
         for (int code = 0; code < FIRST_CODE; code++) {
             prefix[code] = -1;
@@ -86,7 +85,7 @@ public final class LZW {
         int capacity = capacityFor(startWidth);
 
         int previousCode = r.readBits(width);
-        int position = expand(out, 0, previousCode, prefix, suffix, stack);
+        int position = expand(out, 0, previousCode, prefix, suffix);
 
         while (position < n) {
             if (next < maxEntries && next + 1 > capacity && width < maxWidth) {
@@ -99,10 +98,10 @@ public final class LZW {
 
             if (code < next) {
                 first = firstByte(code, prefix, suffix);
-                position = expand(out, position, code, prefix, suffix, stack);
+                position = expand(out, position, code, prefix, suffix);
             } else {
                 first = firstByte(previousCode, prefix, suffix);
-                position = expand(out, position, previousCode, prefix, suffix, stack);
+                position = expand(out, position, previousCode, prefix, suffix);
                 out[position] = (byte) first;
                 position = position + 1;
             }
@@ -119,21 +118,13 @@ public final class LZW {
         return out;
     }
 
-    private static int expand(byte[] out, int position, int code, int[] prefix, int[] suffix, int[] stack) {
-        int top = 0;
-
-        while (code != -1) {
-            stack[top] = suffix[code];
-            top++;
-            code = prefix[code];
+    private static int expand(byte[] out, int position, int code, int[] prefix, int[] suffix) {
+        if (prefix[code] != -1) {
+            position = expand(out, position, prefix[code], prefix, suffix);
         }
 
-        while (top > 0) {
-            top--;
-            out[position] = (byte) stack[top];
-            position = position + 1;
-        }
-        return position;
+        out[position] = (byte) suffix[code];
+        return position + 1;
     }
 
     private static int firstByte(int code, int[] prefix, int[] suffix) {
