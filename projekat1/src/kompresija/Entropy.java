@@ -1,8 +1,8 @@
 package kompresija;
 
-public final class Entropy {
+import java.util.Arrays;
 
-    private static final double LOG2 = Math.log(2);
+public final class Entropy {
 
     private Entropy() {
     }
@@ -10,7 +10,7 @@ public final class Entropy {
     public static long[] histogram(byte[] data) {
         long[] counts = new long[256];
         for (byte b : data) {
-            counts[b & 0xFF]++;
+            counts[Byte.toUnsignedInt(b)]++;
         }
         return counts;
     }
@@ -26,18 +26,18 @@ public final class Entropy {
                 continue;
             }
             double p = (double) count / n;
-            h -= p * (Math.log(p) / LOG2);
+            h -= p * log2(p);
         }
         return h;
     }
 
     public static int distinct(long[] counts) {
-        int d = 0;
-        for (long c : counts) {
-            if (c > 0) {
-                d++;
-            }
-        }
-        return d;
+        return (int) Arrays.stream(counts)
+                .filter(count -> count > 0)
+                .count();
+    }
+
+    private static double log2(double x) {
+        return Math.log(x) / Math.log(2);
     }
 }

@@ -9,7 +9,7 @@ import java.util.Arrays;
 
 public class Main {
 
-    private static final String INPUT_FILE = "test_ravnomeran.bin";
+    private static final String INPUT_FILE = "farma.txt";
 
     public static void main(String[] args) throws IOException {
         Path input = Path.of(INPUT_FILE);
@@ -54,16 +54,25 @@ public class Main {
 
         long size = Files.size(encoded);
         int header = Header.SIZE_IN_BYTES + CanonicalCode.TABLE_BYTES;
+        String check = Arrays.equals(data, decoded) ? "OK" : "GRESKA";
 
         System.out.printf("%-14s %9d %7d %11s %9s %8.3f s %10.3f s %9s%n",
-                name,
-                size,
-                header,
-                n == 0 ? "-" : String.format("%.4f", size * 8.0 / n),
-                n == 0 ? "-" : String.format("%.2f%%", 100.0 * (1 - (double) size / n)),
-                encodeSeconds,
-                decodeSeconds,
-                Arrays.equals(data, decoded) ? "OK" : "GRESKA");
+                name, size, header, bitsPerByte(size, n), savings(size, n), encodeSeconds, decodeSeconds, check);
+    }
+
+    private static String bitsPerByte(long size, long n) {
+        if (n == 0) {
+            return "-";
+        }
+        return String.format("%.4f", size * 8.0 / n);
+    }
+
+    private static String savings(long size, long n) {
+        if (n == 0) {
+            return "-";
+        }
+        double ratio = (double) size / n;
+        return String.format("%.2f%%", 100.0 * (1 - ratio));
     }
 
     private static void encodeCanonical(byte[] data, int[] lengths, int method, Path out) throws IOException {

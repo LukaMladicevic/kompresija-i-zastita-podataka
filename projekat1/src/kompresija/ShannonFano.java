@@ -1,6 +1,6 @@
 package kompresija;
 
-import java.util.Arrays;
+import java.util.stream.IntStream;
 
 public final class ShannonFano {
 
@@ -25,21 +25,14 @@ public final class ShannonFano {
             return lengths;
         }
 
-        Integer[] order = new Integer[distinct];
-        int k = 0;
-        for (int sym = 0; sym < 256; sym++) {
-            if (counts[sym] > 0) {
-                order[k++] = sym;
-            }
-        }
-        Arrays.sort(order, (a, b) -> Long.compare(counts[b], counts[a]));
+        int[] symbols = IntStream.range(0, 256)
+                .filter(sym -> counts[sym] > 0)
+                .boxed()
+                .sorted((a, b) -> Long.compare(counts[b], counts[a]))
+                .mapToInt(Integer::intValue)
+                .toArray();
 
-        int[] symbols = new int[distinct];
-        for (int i = 0; i < distinct; i++) {
-            symbols[i] = order[i];
-        }
-
-        split(symbols, counts, 0, distinct - 1, lengths);
+        split(symbols, counts, 0, symbols.length - 1, lengths);
         return lengths;
     }
 

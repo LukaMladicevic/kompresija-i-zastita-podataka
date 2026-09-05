@@ -15,7 +15,7 @@ public class BitWriter implements Closeable {
     }
 
     public void writeBit(int bit) throws IOException {
-        buffer = (buffer << 1) | (bit & 1);
+        buffer = (buffer << 1) | bit;
         bitCount++;
 
         if (bitCount == 8) {

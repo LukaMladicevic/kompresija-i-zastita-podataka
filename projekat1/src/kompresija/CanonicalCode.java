@@ -1,6 +1,8 @@
 package kompresija;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.stream.IntStream;
 
 public final class CanonicalCode {
 
@@ -11,13 +13,7 @@ public final class CanonicalCode {
     }
 
     public static int maxLength(int[] lengths) {
-        int max = 0;
-        for (int len : lengths) {
-            if (len > max) {
-                max = len;
-            }
-        }
-        return max;
+        return Arrays.stream(lengths).max().orElse(0);
     }
 
     public static int[] buildCodes(int[] lengths) {
@@ -28,10 +24,11 @@ public final class CanonicalCode {
         for (int len = 1; len <= maxLen; len++) {
             for (int sym = 0; sym < 256; sym++) {
                 if (lengths[sym] == len) {
-                    codes[sym] = code++;
+                    codes[sym] = code;
+                    code++;
                 }
             }
-            code <<= 1;
+            code = code * 2;
         }
         return codes;
     }
@@ -52,7 +49,7 @@ public final class CanonicalCode {
 
     public static void encode(BitWriter w, byte[] data, int[] lengths, int[] codes) throws IOException {
         for (byte b : data) {
-            int sym = b & 0xFF;
+            int sym = Byte.toUnsignedInt(b);
             w.writeBits(codes[sym], lengths[sym]);
         }
     }
@@ -64,47 +61,20 @@ public final class CanonicalCode {
         }
 
         int maxLen = maxLength(lengths);
-
-        int[] symbolsPerLength = new int[maxLen + 1];
-        for (int len : lengths) {
-            if (len > 0) {
-                symbolsPerLength[len]++;
-            }
-        }
-
-        int[] firstCode = new int[maxLen + 1];
-        int[] firstIndex = new int[maxLen + 1];
-        int code = 0;
-        int index = 0;
-        for (int len = 1; len <= maxLen; len++) {
-            firstCode[len] = code;
-            firstIndex[len] = index;
-
-            index = index + symbolsPerLength[len];
-
-            code = code + symbolsPerLength[len];
-            code = code << 1;
-        }
-
-        int[] sorted = new int[index];
-        int k = 0;
-        for (int len = 1; len <= maxLen; len++) {
-            for (int sym = 0; sym < 256; sym++) {
-                if (lengths[sym] == len) {
-                    sorted[k++] = sym;
-                }
-            }
-        }
+        int[] symbolsPerLength = countSymbolsPerLength(lengths, maxLen);
+        int[] firstCode = firstCodePerLength(symbolsPerLength, maxLen);
+        int[] firstIndex = firstIndexPerLength(symbolsPerLength, maxLen);
+        int[] sorted = symbolsInCanonicalOrder(lengths, maxLen);
 
         for (int i = 0; i < n; i++) {
             int current = 0;
             int symbol = -1;
 
             for (int len = 1; len <= maxLen; len++) {
-                current = (current << 1) | r.readBit();
+                current = current * 2 + r.readBit();
 
                 int first = firstCode[len];
-                int last = firstCode[len] + symbolsPerLength[len] - 1;
+                int last = first + symbolsPerLength[len] - 1;
 
                 if (current >= first && current <= last) {
                     int offset = current - first;
@@ -120,5 +90,44 @@ public final class CanonicalCode {
         }
 
         return out;
+    }
+
+    private static int[] countSymbolsPerLength(int[] lengths, int maxLen) {
+        int[] result = new int[maxLen + 1];
+        for (int len : lengths) {
+            if (len > 0) {
+                result[len]++;
+            }
+        }
+        return result;
+    }
+
+    private static int[] firstCodePerLength(int[] symbolsPerLength, int maxLen) {
+        int[] result = new int[maxLen + 1];
+
+        int code = 0;
+        for (int len = 1; len <= maxLen; len++) {
+            result[len] = code;
+            code = code + symbolsPerLength[len];
+            code = code * 2;
+        }
+        return result;
+    }
+
+    private static int[] firstIndexPerLength(int[] symbolsPerLength, int maxLen) {
+        int[] result = new int[maxLen + 1];
+
+        int index = 0;
+        for (int len = 1; len <= maxLen; len++) {
+            result[len] = index;
+            index = index + symbolsPerLength[len];
+        }
+        return result;
+    }
+
+    private static int[] symbolsInCanonicalOrder(int[] lengths, int maxLen) {
+        return IntStream.rangeClosed(1, maxLen)
+                .flatMap(len -> IntStream.range(0, 256).filter(sym -> lengths[sym] == len))
+                .toArray();
     }
 }

@@ -1,5 +1,6 @@
 package kompresija;
 
+import java.util.Objects;
 import java.util.PriorityQueue;
 
 public final class Huffman {
@@ -63,7 +64,7 @@ public final class Huffman {
             queue.add(new Node(left, right));
         }
 
-        assignDepths(queue.poll(), 0, lengths);
+        assignDepths(Objects.requireNonNull(queue.poll()), 0, lengths);
         return lengths;
     }
 

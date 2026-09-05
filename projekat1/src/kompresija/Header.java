@@ -1,6 +1,7 @@
 package kompresija;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 
 public final class Header {
 
@@ -9,7 +10,11 @@ public final class Header {
     public static final int LZ77 = 2;
     public static final int LZW = 3;
 
-    public static final int SIZE_IN_BYTES = 11;
+    private static final int MAGIC_BYTES = 2;
+    private static final int METHOD_BYTES = 1;
+    private static final int LENGTH_BYTES = 8;
+
+    public static final int SIZE_IN_BYTES = MAGIC_BYTES + METHOD_BYTES + LENGTH_BYTES;
 
     private static final int MAGIC_FIRST = 'K';
     private static final int MAGIC_SECOND = 'Z';
@@ -27,8 +32,9 @@ public final class Header {
         w.writeBits(MAGIC_SECOND, 8);
         w.writeBits(method, 8);
 
-        for (int shift = 56; shift >= 0; shift -= 8) {
-            w.writeBits((int) ((n >>> shift) & 0xFF), 8);
+        byte[] lengthBytes = ByteBuffer.allocate(LENGTH_BYTES).putLong(n).array();
+        for (byte b : lengthBytes) {
+            w.writeBits(Byte.toUnsignedInt(b), 8);
         }
     }
 
@@ -42,10 +48,11 @@ public final class Header {
 
         int method = r.readBits(8);
 
-        long n = 0;
-        for (int i = 0; i < 8; i++) {
-            n = (n << 8) | r.readBits(8);
+        byte[] lengthBytes = new byte[LENGTH_BYTES];
+        for (int i = 0; i < LENGTH_BYTES; i++) {
+            lengthBytes[i] = (byte) r.readBits(8);
         }
+        long n = ByteBuffer.wrap(lengthBytes).getLong();
 
         return new Header(method, n);
     }
