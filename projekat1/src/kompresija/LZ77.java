@@ -6,7 +6,7 @@ public final class LZ77 {
 
     private static final int WINDOW_SIZE = 32768;
     private static final int MIN_MATCH = 3;
-    private static final int MAX_LENGTH = 10;
+    private static final int MAX_LENGTH = 255;
 
     private static final int DISTANCE_BITS = bitsNeeded(WINDOW_SIZE - 1);
     private static final int LENGTH_BITS = bitsNeeded(MAX_LENGTH - MIN_MATCH);
@@ -29,6 +29,7 @@ public final class LZ77 {
             int windowStart = Math.max(0, position - WINDOW_SIZE);
             for (int start = windowStart; start < position; start++) {
                 int length = matchLength(data, start, position);
+
                 if (length > bestLength) {
                     bestLength = length;
                     bestDistance = position - start;

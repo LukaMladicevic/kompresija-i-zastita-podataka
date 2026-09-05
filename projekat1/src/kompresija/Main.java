@@ -9,7 +9,7 @@ import java.util.Arrays;
 
 public class Main {
 
-    private static final String INPUT_FILE = "farma.txt";
+    private static final String INPUT_FILE = "sekspir.txt";
 
     public static void main(String[] args) throws IOException {
         Path input = Path.of(INPUT_FILE);
@@ -39,6 +39,29 @@ public class Main {
         reportCanonical("Shannon-Fano", Header.SHANNON_FANO, ShannonFano.lengths(counts), data, ".sf");
         reportCanonical("Huffman", Header.HUFFMAN, Huffman.lengths(counts), data, ".huf");
         reportLZ77(data);
+        reportLZW(data);
+    }
+
+    private static void reportLZW(byte[] data) throws IOException {
+        Path encoded = Path.of(INPUT_FILE + ".lzw");
+
+        long start = System.nanoTime();
+        try (BitWriter w = new BitWriter(new BufferedOutputStream(Files.newOutputStream(encoded)))) {
+            new Header(Header.LZW, data.length).write(w);
+            LZW.encode(w, data);
+        }
+        double encodeSeconds = seconds(start);
+
+        start = System.nanoTime();
+        byte[] decoded;
+        try (BitReader r = new BitReader(new BufferedInputStream(Files.newInputStream(encoded)))) {
+            Header header = Header.read(r);
+            decoded = LZW.decode(r, header.n);
+        }
+        double decodeSeconds = seconds(start);
+
+        printRow("LZW", Files.size(encoded), Header.SIZE_IN_BYTES + LZW.PARAMETER_BYTES,
+                data, decoded, encodeSeconds, decodeSeconds);
     }
 
     private static void reportCanonical(String name, int method, int[] lengths, byte[] data, String suffix)

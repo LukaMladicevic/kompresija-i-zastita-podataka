@@ -1,0 +1,52 @@
+PROJEKAT 1
+----------
+
+sekspir.txt - The Complete Works of William Shakespeare, cist tekst
+
+  N (duzina)          5638480 bajtova  (5.38 MB)
+  razlicitih bajtova  109
+  H (bajt-entropija)  4.888696 bita po bajtu
+  N*H/8               3445602 bajtova
+
+
+REZULTATI
+---------
+
+  metod           kodiran   header   bita/bajt   usteda   kodiranje   dekodiranje
+  ------------------------------------------------------------------------------
+  Shannon-Fano    3473269      203      4.9280   38.40%     0.501 s       0.306 s
+  Huffman         3470653      203      4.9242   38.45%     0.189 s       0.213 s
+  LZ77            2891197       14      4.1021   48.72%   124.808 s       0.150 s
+  LZW             2398918       14      3.4036   57.45%     0.553 s       0.177 s
+
+Za sva cetiri metode dekodirani fajl ima isto bajtova kao original
+
+Shannon-Fano i Huffman ostaju iznad H, sto je i teorijska granica za kodiranje po simbolu
+LZ77 i LZW su ispod nje, jer koriste ponavljanja u tekstu sto ne mozemo izmeriti bajt-entropijom
+
+
+PARAMETRI
+---------
+
+Shannon-Fano i Huffman
+  6 bita po duzini kodne reci u zaglavlju (256 x 6 bita = 192 B)
+  Najduza kodna rec na ovom fajlu: Shannon-Fano 23 bita, Huffman 22 bita
+  Opseg 0-63 koji staje u 6 bita ima dovoljnu rezervu
+  Kanonski kod - u fajl idu samo duzine, kodove dekoder rekonstruise sam
+
+LZ77
+  WINDOW_SIZE = 32768   standardna velicina sliding windowa
+  MIN_MATCH   = 3
+  MAX_LENGTH  = 255     najvise sto staje u jedan bajt
+
+  Zapis: literal = 1 + 8 = 9 bita, (offset, length) = 1 + 15 + 8 = 24 bita
+  Zapisuje se d-1 i k-MIN_MATCH umesto d i k, cime polja koriste pun opseg
+
+  Pretraga je iscrpna: za svaku poziciju se proveravaju sve pozicije unazad do
+  granice sliding windowa i uzima se najduze preklapanje
+  Time je zagarantovano da se uvek nadje najduzi moguci (offset, length) par.
+
+LZW
+  START_WIDTH = 9    pocetna sirina indeksa
+  MAX_WIDTH   = 16   recnik do 65536 ulaza
+  Koriscenjem LZW tj pretragom i dopunjavanjem recnika dobijamo najbolju kompresiju
