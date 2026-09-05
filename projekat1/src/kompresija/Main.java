@@ -36,28 +36,69 @@ public class Main {
                 "metod", "kodiran", "header", "bita/bajt", "usteda", "kodiranje", "dekodiranje", "provera");
         System.out.println("-".repeat(90));
 
-        report("Shannon-Fano", Header.SHANNON_FANO, ShannonFano.lengths(counts), data, ".sf");
-        report("Huffman", Header.HUFFMAN, Huffman.lengths(counts), data, ".huf");
+        reportCanonical("Shannon-Fano", Header.SHANNON_FANO, ShannonFano.lengths(counts), data, ".sf");
+        reportCanonical("Huffman", Header.HUFFMAN, Huffman.lengths(counts), data, ".huf");
+        reportLZ77(data);
     }
 
-    private static void report(String name, int method, int[] lengths, byte[] data, String suffix) throws IOException {
+    private static void reportCanonical(String name, int method, int[] lengths, byte[] data, String suffix)
+            throws IOException {
         Path encoded = Path.of(INPUT_FILE + suffix);
-        long n = data.length;
+        int[] codes = CanonicalCode.buildCodes(lengths);
 
         long start = System.nanoTime();
-        encodeCanonical(data, lengths, method, encoded);
-        double encodeSeconds = (System.nanoTime() - start) / 1e9;
+        try (BitWriter w = new BitWriter(new BufferedOutputStream(Files.newOutputStream(encoded)))) {
+            new Header(method, data.length).write(w);
+            CanonicalCode.writeLengths(w, lengths);
+            CanonicalCode.encode(w, data, lengths, codes);
+        }
+        double encodeSeconds = seconds(start);
 
         start = System.nanoTime();
-        byte[] decoded = decodeCanonical(encoded);
-        double decodeSeconds = (System.nanoTime() - start) / 1e9;
+        byte[] decoded;
+        try (BitReader r = new BitReader(new BufferedInputStream(Files.newInputStream(encoded)))) {
+            Header header = Header.read(r);
+            decoded = CanonicalCode.decode(r, CanonicalCode.readLengths(r), header.n);
+        }
+        double decodeSeconds = seconds(start);
 
-        long size = Files.size(encoded);
-        int header = Header.SIZE_IN_BYTES + CanonicalCode.TABLE_BYTES;
+        printRow(name, Files.size(encoded), Header.SIZE_IN_BYTES + CanonicalCode.TABLE_BYTES,
+                data, decoded, encodeSeconds, decodeSeconds);
+    }
+
+    private static void reportLZ77(byte[] data) throws IOException {
+        Path encoded = Path.of(INPUT_FILE + ".lz77");
+
+        long start = System.nanoTime();
+        try (BitWriter w = new BitWriter(new BufferedOutputStream(Files.newOutputStream(encoded)))) {
+            new Header(Header.LZ77, data.length).write(w);
+            LZ77.encode(w, data);
+        }
+        double encodeSeconds = seconds(start);
+
+        start = System.nanoTime();
+        byte[] decoded;
+        try (BitReader r = new BitReader(new BufferedInputStream(Files.newInputStream(encoded)))) {
+            Header header = Header.read(r);
+            decoded = LZ77.decode(r, header.n);
+        }
+        double decodeSeconds = seconds(start);
+
+        printRow("LZ77", Files.size(encoded), Header.SIZE_IN_BYTES + LZ77.PARAMETER_BYTES,
+                data, decoded, encodeSeconds, decodeSeconds);
+    }
+
+    private static void printRow(String name, long size, int header, byte[] data, byte[] decoded,
+                                 double encodeSeconds, double decodeSeconds) {
+        long n = data.length;
         String check = Arrays.equals(data, decoded) ? "OK" : "GRESKA";
 
         System.out.printf("%-14s %9d %7d %11s %9s %8.3f s %10.3f s %9s%n",
                 name, size, header, bitsPerByte(size, n), savings(size, n), encodeSeconds, decodeSeconds, check);
+    }
+
+    private static double seconds(long startNanos) {
+        return (System.nanoTime() - startNanos) / 1e9;
     }
 
     private static String bitsPerByte(long size, long n) {
@@ -73,23 +114,5 @@ public class Main {
         }
         double ratio = (double) size / n;
         return String.format("%.2f%%", 100.0 * (1 - ratio));
-    }
-
-    private static void encodeCanonical(byte[] data, int[] lengths, int method, Path out) throws IOException {
-        int[] codes = CanonicalCode.buildCodes(lengths);
-
-        try (BitWriter w = new BitWriter(new BufferedOutputStream(Files.newOutputStream(out)))) {
-            new Header(method, data.length).write(w);
-            CanonicalCode.writeLengths(w, lengths);
-            CanonicalCode.encode(w, data, lengths, codes);
-        }
-    }
-
-    private static byte[] decodeCanonical(Path in) throws IOException {
-        try (BitReader r = new BitReader(new BufferedInputStream(Files.newInputStream(in)))) {
-            Header header = Header.read(r);
-            int[] lengths = CanonicalCode.readLengths(r);
-            return CanonicalCode.decode(r, lengths, header.n);
-        }
     }
 }
