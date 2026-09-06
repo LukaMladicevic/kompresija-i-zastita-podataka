@@ -8,46 +8,44 @@ public final class LinearCode {
     private LinearCode() {
     }
 
-    public static int syndrome(long[] h, int vector) {
+    public static int syndrome(int[] h, int vector) {
         int result = 0;
 
         for (int row = 0; row < h.length; row++) {
-            if (parity(h[row] & vector) == 1) {
-                result = ParityCheckMatrix.setBit(result, row);
+            if (Bits.parity(h[row] & vector) == 1) {
+                result = Bits.set(result, row);
             }
         }
         return result;
     }
 
-    public static int rank(long[] h, int n) {
-        long[] rows = h.clone();
-        int rank = 0;
+    public static int rank(int[] h, int n) {
+        int[] rows = h.clone();
+        int pivotRow = 0;
 
-        for (int column = 0; column < n; column++) {
-            int pivot = findPivot(rows, rank, column);
+        for (int column = 0; column < n && pivotRow < rows.length; column++) {
+            int pivot = findPivot(rows, pivotRow, column);
 
             if (pivot == -1) {
                 continue;
             }
 
-            long temp = rows[rank];
-            rows[rank] = rows[pivot];
-            rows[pivot] = temp;
+            swap(rows, pivotRow, pivot);
 
             for (int row = 0; row < rows.length; row++) {
-                if (row != rank && ParityCheckMatrix.bit(rows[row], column) == 1) {
-                    rows[row] = rows[row] ^ rows[rank];
+                if (row != pivotRow && Bits.get(rows[row], column) == 1) {
+                    rows[row] = rows[row] ^ rows[pivotRow];
                 }
             }
-            rank++;
+            pivotRow++;
         }
-        return rank;
+        return pivotRow;
     }
 
-    public static int[] codewords(long[] h, int n) {
+    public static int[] codewords(int[] h, int n) {
         List<Integer> found = new ArrayList<>();
 
-        for (int candidate = 0; candidate < twoTo(n); candidate++) {
+        for (int candidate = 0; candidate < Bits.twoTo(n); candidate++) {
             if (syndrome(h, candidate) == 0) {
                 found.add(candidate);
             }
@@ -57,51 +55,44 @@ public final class LinearCode {
 
     public static int lightestCodeword(int[] codewords) {
         int lightest = -1;
+        int lightestWeight = Integer.MAX_VALUE;
 
         for (int codeword : codewords) {
             if (codeword == 0) {
                 continue;
             }
 
-            if (lightest == -1 || weight(codeword) < weight(lightest)) {
+            int weight = Bits.weight(codeword);
+
+            if (weight < lightestWeight) {
                 lightest = codeword;
+                lightestWeight = weight;
             }
         }
         return lightest;
     }
 
-    public static int weight(int vector) {
-        return Integer.bitCount(vector);
-    }
-
-    public static int groupSum(long[] h, int group, int rowsPerGroup) {
+    public static int groupSum(int[] h, int group, int rowsPerGroup) {
         int sum = 0;
 
         for (int rowInGroup = 0; rowInGroup < rowsPerGroup; rowInGroup++) {
-            sum = sum ^ (int) h[group * rowsPerGroup + rowInGroup];
+            sum = sum ^ h[group * rowsPerGroup + rowInGroup];
         }
         return sum;
     }
 
-    public static int twoTo(int exponent) {
-        int value = 1;
-
-        for (int i = 0; i < exponent; i++) {
-            value = value * 2;
-        }
-        return value;
-    }
-
-    private static int findPivot(long[] rows, int fromRow, int column) {
+    private static int findPivot(int[] rows, int fromRow, int column) {
         for (int row = fromRow; row < rows.length; row++) {
-            if (ParityCheckMatrix.bit(rows[row], column) == 1) {
+            if (Bits.get(rows[row], column) == 1) {
                 return row;
             }
         }
         return -1;
     }
 
-    public static int parity(long value) {
-        return Long.bitCount(value) % 2;
+    private static void swap(int[] rows, int first, int second) {
+        int temp = rows[first];
+        rows[first] = rows[second];
+        rows[second] = temp;
     }
 }

@@ -9,22 +9,22 @@ public final class SyndromeTable {
     private SyndromeTable() {
     }
 
-    public static int[] build(long[] h, int n, int rows) {
-        int[] corrector = new int[LinearCode.twoTo(rows)];
+    public static int[] build(int[] h, int n, int rows) {
+        int[] corrector = new int[Bits.twoTo(rows)];
         Arrays.fill(corrector, UNREACHABLE);
 
-        for (int error = 0; error < LinearCode.twoTo(n); error++) {
+        for (int error = 0; error < Bits.twoTo(n); error++) {
             int syndrome = LinearCode.syndrome(h, error);
 
             if (corrector[syndrome] == UNREACHABLE
-                    || LinearCode.weight(error) < LinearCode.weight(corrector[syndrome])) {
+                    || Bits.weight(error) < Bits.weight(corrector[syndrome])) {
                 corrector[syndrome] = error;
             }
         }
         return corrector;
     }
 
-    public static int decode(long[] h, int[] corrector, int received) {
+    public static int decode(int[] h, int[] corrector, int received) {
         int syndrome = LinearCode.syndrome(h, received);
         return received ^ corrector[syndrome];
     }

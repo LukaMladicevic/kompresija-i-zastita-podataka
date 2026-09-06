@@ -172,9 +172,7 @@ Pri svakom pokretanju se ispisuje pet provera:
      svih jedinica
   3. XOR kolona H na pozicijama najlaksje kodne reci je nula
   4. tabela sindroma: za svih 128 korektora i svih 256 kodnih reci
-     dekodiranje vraca poslatu rec; za svih 2^15 primljenih vektora
+     dekodiranje vraca poslatu rec, za svih 2^15 primljenih vektora
      rezultat je kodna rec
-  5. Gallager B: 256 kodnih reci prolazi nepromenjeno; kad god dekoder
-     nesto vrati, to je kodna rec; sve greske lakse od w_fail su ispravljene
-
-Vreme celog pokretanja je oko 2.8 s
+  5. Gallager B: 256 kodnih reci prolazi nepromenjeno kad god dekoder
+     nesto vrati, to je kodna rec, sve greske lakse od w_fail su ispravljene

@@ -1,5 +1,8 @@
 package ldpc;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class Main {
 
     private static final int INDEX = 69;
@@ -14,29 +17,65 @@ public class Main {
     private static final int MAX_ITERATIONS = 50;
     private static final int SHOWN_ITERATIONS = 4;
 
+    private static final int ALL_VECTORS = Bits.twoTo(N);
+
+    private record GallagerScan(int lightestFailure, int[] failedByWeight, int[] totalByWeight,
+                                boolean alwaysReturnsCodeword) {
+    }
+
     public static void main(String[] args) {
         System.out.println("seed: " + INDEX);
         System.out.println("n = " + N + ", n-k = " + ROWS
                 + ", w_r = " + ROW_WEIGHT + ", w_c = " + COLUMN_WEIGHT + "\n");
 
-        long[] h = ParityCheckMatrix.build(N, ROWS, ROW_WEIGHT, COLUMN_WEIGHT, INDEX);
+        int[] h = ParityCheckMatrix.build(N, ROWS, ROW_WEIGHT, COLUMN_WEIGHT, INDEX);
         int[] codewords = LinearCode.codewords(h, N);
+        GallagerScan scan = scanAllErrors(h);
 
         printMatrix(h);
         printWeightCheck(h);
         printRank(h, codewords);
         printDistance(h, codewords);
         printSyndromeTable(h, codewords);
-        printGallagerB(h, codewords);
-        printFailingError(h, codewords);
+        printGallagerB(h, codewords, scan);
+        printFailingError(h, codewords, scan);
     }
 
-    private static void printGallagerB(long[] h, int[] codewords) {
+    private static GallagerScan scanAllErrors(int[] h) {
+        int[] failed = new int[N + 1];
+        int[] total = new int[N + 1];
+        int lightestFailure = -1;
+        int lightestWeight = Integer.MAX_VALUE;
+        boolean alwaysCodeword = true;
+
+        for (int error = 0; error < ALL_VECTORS; error++) {
+            int weight = Bits.weight(error);
+            total[weight]++;
+
+            int result = decodeGallager(h, error);
+
+            if (result != GallagerB.NOT_DECODED && LinearCode.syndrome(h, result) != 0) {
+                alwaysCodeword = false;
+            }
+
+            if (result != 0) {
+                failed[weight]++;
+
+                if (weight < lightestWeight) {
+                    lightestFailure = error;
+                    lightestWeight = weight;
+                }
+            }
+        }
+        return new GallagerScan(lightestFailure, failed, total, alwaysCodeword);
+    }
+
+    private static void printGallagerB(int[] h, int[] codewords, GallagerScan scan) {
         System.out.println("\nGALLAGER B");
         System.out.println("th_0 = " + THRESHOLD_ZERO + ", th_1 = " + THRESHOLD_ONE
                 + ", maxIter = " + MAX_ITERATIONS + "   (prag: 2 od 3)");
 
-        trace(h, ParityCheckMatrix.setBit(0, 0));
+        trace(h, Bits.set(0, 0));
         trace(h, firstCorrectableError(h));
 
         boolean codewordsOk = true;
@@ -46,26 +85,18 @@ public class Main {
             }
         }
 
-        boolean alwaysCodeword = true;
-        for (int received = 0; received < LinearCode.twoTo(N); received++) {
-            int result = decodeGallager(h, received);
-
-            if (result != GallagerB.NOT_DECODED && LinearCode.syndrome(h, result) != 0) {
-                alwaysCodeword = false;
-            }
-        }
-
-        System.out.println("\nprovera: " + (codewordsOk && alwaysCodeword ? "OK" : "GRESKA"));
+        System.out.println("\nprovera: "
+                + (codewordsOk && scan.alwaysReturnsCodeword() ? "OK" : "GRESKA"));
     }
 
-    private static void printFailingError(long[] h, int[] codewords) {
-        int failing = lightestFailingError(h);
-        int failWeight = LinearCode.weight(failing);
-        int distance = LinearCode.weight(LinearCode.lightestCodeword(codewords));
+    private static void printFailingError(int[] h, int[] codewords, GallagerScan scan) {
+        int failing = scan.lightestFailure();
+        int failWeight = Bits.weight(failing);
+        int distance = Bits.weight(LinearCode.lightestCodeword(codewords));
 
         System.out.println("\nNAJLAKSA GRESKA KOJU GALLAGER B NE ISPRAVLJA");
         System.out.println("\nw_fail = " + failWeight);
-        System.out.println("e = " + bits(failing, N) + "   bitovi " + positions(failing));
+        System.out.println("e = " + Bits.toText(failing, N) + "   bitovi " + positions(failing));
         System.out.println("ishod: " + (decodeGallager(h, failing) == GallagerB.NOT_DECODED
                 ? "ne konvergira" : "konvergira na pogresnu kodnu rec"));
 
@@ -75,11 +106,11 @@ public class Main {
                 + ", pa ni Gallager B ne ispravlja sve greske te tezine");
 
         printFourCycles(h, failing);
-        printFailureCounts(h);
+        printFailureCounts(scan);
 
         boolean lighterAllCorrected = true;
-        for (int error = 0; error < LinearCode.twoTo(N); error++) {
-            if (LinearCode.weight(error) < failWeight && decodeGallager(h, error) != 0) {
+        for (int weight = 0; weight < failWeight; weight++) {
+            if (scan.failedByWeight()[weight] != 0) {
                 lighterAllCorrected = false;
             }
         }
@@ -88,83 +119,67 @@ public class Main {
         System.out.println("\nprovera: " + (lighterAllCorrected && reallyFails ? "OK" : "GRESKA"));
     }
 
-    private static int lightestFailingError(long[] h) {
-        for (int weight = 1; weight <= N; weight++) {
-            for (int error = 0; error < LinearCode.twoTo(N); error++) {
-                if (LinearCode.weight(error) == weight && decodeGallager(h, error) != 0) {
-                    return error;
-                }
-            }
-        }
-        return 0;
-    }
-
-    private static void printFourCycles(long[] h, int failing) {
+    private static int count4Cycles(int[] h) {
         int cycles = 0;
-        int withoutPartner = 0;
 
         for (int first = 0; first < N; first++) {
-            boolean hasPartner = false;
-
-            for (int second = 0; second < N; second++) {
-                if (second != first && ParityCheckMatrix.sharedChecks(h, first, second) >= 2) {
-                    hasPartner = true;
-
-                    if (second > first) {
-                        cycles++;
-                    }
+            for (int second = first + 1; second < N; second++) {
+                if (ParityCheckMatrix.sharedChecks(h, first, second) >= 2) {
+                    cycles++;
                 }
             }
+        }
+        return cycles;
+    }
 
-            if (!hasPartner) {
-                withoutPartner++;
+    private static List<Integer> partnersOf(int[] h, int bit) {
+        List<Integer> partners = new ArrayList<>();
+
+        for (int other = 0; other < N; other++) {
+            if (other != bit && ParityCheckMatrix.sharedChecks(h, bit, other) >= 2) {
+                partners.add(other);
             }
         }
+        return partners;
+    }
 
-        System.out.println("\nparova kolona sa >= 2 zajednicke provere (4-ciklusi): " + cycles);
-        System.out.println("kolona bez takvog partnera: " + withoutPartner);
+    private static int columnsWithoutPartner(int[] h) {
+        int count = 0;
+
+        for (int column = 0; column < N; column++) {
+            if (partnersOf(h, column).isEmpty()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static void printFourCycles(int[] h, int failing) {
+        System.out.println("\nparova kolona sa >= 2 zajednicke provere (4-ciklusi): "
+                + count4Cycles(h));
+        System.out.println("kolona bez takvog partnera: " + columnsWithoutPartner(h));
 
         for (int bit = 0; bit < N; bit++) {
-            if (ParityCheckMatrix.bit(failing, bit) == 0) {
-                continue;
+            if (Bits.get(failing, bit) == 1) {
+                System.out.println("partneri bita " + bit + " u 4-ciklusu: "
+                        + join(partnersOf(h, bit)));
             }
-
-            StringBuilder partners = new StringBuilder();
-            for (int other = 0; other < N; other++) {
-                if (other != bit && ParityCheckMatrix.sharedChecks(h, bit, other) >= 2) {
-                    if (partners.length() > 0) {
-                        partners.append(", ");
-                    }
-                    partners.append(other);
-                }
-            }
-            System.out.println("partneri bita " + bit + " u 4-ciklusu: " + partners);
         }
     }
 
-    private static void printFailureCounts(long[] h) {
-        int[] failed = new int[N + 1];
-        int[] total = new int[N + 1];
-
-        for (int error = 0; error < LinearCode.twoTo(N); error++) {
-            int weight = LinearCode.weight(error);
-            total[weight]++;
-
-            if (decodeGallager(h, error) != 0) {
-                failed[weight]++;
-            }
-        }
-
+    private static void printFailureCounts(GallagerScan scan) {
         System.out.println("\nneispravljene greske po tezini:");
+
         for (int weight = 0; weight <= N; weight++) {
-            System.out.println("tezina " + weight + ": " + failed[weight] + " od " + total[weight]);
+            System.out.println("tezina " + weight + ": " + scan.failedByWeight()[weight]
+                    + " od " + scan.totalByWeight()[weight]);
         }
     }
 
-    private static void trace(long[] h, int error) {
-        System.out.println("\nposlato:   " + bits(0, N));
-        System.out.println("greska:    " + bits(error, N)
-                + "   tezina " + LinearCode.weight(error)
+    private static void trace(int[] h, int error) {
+        System.out.println("\nposlato:   " + Bits.toText(0, N));
+        System.out.println("greska:    " + Bits.toText(error, N)
+                + "   tezina " + Bits.weight(error)
                 + ", bitovi " + positions(error));
 
         int current = error;
@@ -175,7 +190,7 @@ public class Main {
 
             int next = GallagerB.oneIteration(h, N, error, current, THRESHOLD_ZERO, THRESHOLD_ONE);
 
-            System.out.println("iteracija " + iteration + ": " + bits(next, N)
+            System.out.println("iteracija " + iteration + ": " + Bits.toText(next, N)
                     + "   prevrnuti bitovi: " + positions(current ^ next));
             current = next;
         }
@@ -187,12 +202,12 @@ public class Main {
         } else if (result == 0) {
             System.out.println("ishod: ispravljeno, vracena poslata rec");
         } else {
-            System.out.println("ishod: konvergirao na pogresnu kodnu rec " + bits(result, N));
+            System.out.println("ishod: konvergirao na pogresnu kodnu rec " + Bits.toText(result, N));
         }
     }
 
-    private static int firstCorrectableError(long[] h) {
-        for (int error = 1; error < LinearCode.twoTo(N); error++) {
+    private static int firstCorrectableError(int[] h) {
+        for (int error = 1; error < ALL_VECTORS; error++) {
             if (decodeGallager(h, error) == 0) {
                 return error;
             }
@@ -200,11 +215,11 @@ public class Main {
         return 0;
     }
 
-    private static int decodeGallager(long[] h, int received) {
+    private static int decodeGallager(int[] h, int received) {
         return GallagerB.decode(h, N, received, MAX_ITERATIONS, THRESHOLD_ZERO, THRESHOLD_ONE);
     }
 
-    private static void printSyndromeTable(long[] h, int[] codewords) {
+    private static void printSyndromeTable(int[] h, int[] codewords) {
         int[] corrector = SyndromeTable.build(h, N, ROWS);
 
         System.out.println("\ndostiznih sindroma: " + SyndromeTable.reachable(corrector)
@@ -215,8 +230,9 @@ public class Main {
             if (corrector[syndrome] == SyndromeTable.UNREACHABLE) {
                 continue;
             }
-            System.out.println(bits(syndrome, ROWS) + "   " + bits(corrector[syndrome], N)
-                    + "   " + LinearCode.weight(corrector[syndrome]));
+            System.out.println(Bits.toText(syndrome, ROWS) + "   "
+                    + Bits.toText(corrector[syndrome], N)
+                    + "   " + Bits.weight(corrector[syndrome]));
         }
 
         printCorrectorWeights(corrector);
@@ -237,7 +253,7 @@ public class Main {
         }
 
         boolean closedOk = true;
-        for (int received = 0; received < LinearCode.twoTo(N); received++) {
+        for (int received = 0; received < ALL_VECTORS; received++) {
             if (LinearCode.syndrome(h, SyndromeTable.decode(h, corrector, received)) != 0) {
                 closedOk = false;
             }
@@ -251,7 +267,7 @@ public class Main {
 
         for (int entry : corrector) {
             if (entry != SyndromeTable.UNREACHABLE) {
-                howMany[LinearCode.weight(entry)]++;
+                howMany[Bits.weight(entry)]++;
             }
         }
 
@@ -263,7 +279,7 @@ public class Main {
         }
     }
 
-    private static void printRank(long[] h, int[] codewords) {
+    private static void printRank(int[] h, int[] codewords) {
         int rank = LinearCode.rank(h, N);
         int k = N - rank;
 
@@ -272,47 +288,49 @@ public class Main {
         System.out.println("kodnih reci: " + codewords.length + "   (ocekivano 2^" + k + ")");
 
         int rowsPerGroup = ROWS / COLUMN_WEIGHT;
-        int allOnes = LinearCode.twoTo(N) - 1;
+        int allOnes = ALL_VECTORS - 1;
         boolean groupsOk = true;
 
         System.out.println();
         for (int group = 0; group < COLUMN_WEIGHT; group++) {
             int sum = LinearCode.groupSum(h, group, rowsPerGroup);
-            System.out.println("zbir redova grupe " + (group + 1) + ": " + bits(sum, N));
+            System.out.println("zbir redova grupe " + (group + 1) + ": " + Bits.toText(sum, N));
             groupsOk = groupsOk && sum == allOnes;
         }
         System.out.println("sve tri grupe daju isti vektor -> " + (COLUMN_WEIGHT - 1)
                 + " zavisnosti, rank = " + ROWS + " - " + (COLUMN_WEIGHT - 1));
 
-        boolean countOk = codewords.length == LinearCode.twoTo(k);
+        boolean countOk = codewords.length == Bits.twoTo(k);
 
         System.out.println("\nprovera: " + (groupsOk && countOk ? "OK" : "GRESKA"));
     }
 
-    private static void printDistance(long[] h, int[] codewords) {
+    private static void printDistance(int[] h, int[] codewords) {
         int lightest = LinearCode.lightestCodeword(codewords);
-        int distance = LinearCode.weight(lightest);
+        int distance = Bits.weight(lightest);
 
         System.out.println("\nd(C) = " + distance);
-        System.out.println("najlaksa nenulta kodna rec: " + bits(lightest, N));
+        System.out.println("najlaksa nenulta kodna rec: " + Bits.toText(lightest, N));
         System.out.println("jedinice na pozicijama:     " + positions(lightest));
 
         int columnSum = 0;
         for (int column = 0; column < N; column++) {
-            if (ParityCheckMatrix.bit(lightest, column) == 1) {
-                columnSum = columnSum ^ ParityCheckMatrix.column(h, column);
+            if (Bits.get(lightest, column) == 1) {
+                columnSum = columnSum ^ ParityCheckMatrix.checksOfColumn(h, column);
             }
         }
-        System.out.println("XOR tih kolona H:           " + bits(columnSum, ROWS)
+        System.out.println("XOR tih kolona H:           " + Bits.toText(columnSum, ROWS)
                 + "   (nula -> kolone su zavisne)");
 
         System.out.println("\nidenticne kolone H:");
         int duplicates = 0;
         for (int first = 0; first < N; first++) {
             for (int second = first + 1; second < N; second++) {
-                if (ParityCheckMatrix.column(h, first) == ParityCheckMatrix.column(h, second)) {
+                int firstMask = ParityCheckMatrix.checksOfColumn(h, first);
+
+                if (firstMask == ParityCheckMatrix.checksOfColumn(h, second)) {
                     System.out.println("kolona " + first + " = kolona " + second
-                            + " = " + bits(ParityCheckMatrix.column(h, first), ROWS));
+                            + " = " + Bits.toText(firstMask, ROWS));
                     duplicates++;
                 }
             }
@@ -325,52 +343,58 @@ public class Main {
         System.out.println("detektuje  d-1    = " + (distance - 1) + " gresaka");
 
         boolean dependent = columnSum == 0;
-        boolean noZeroColumn = distance > 1;
+
+        boolean noZeroColumn = true;
+        for (int column = 0; column < N; column++) {
+            if (ParityCheckMatrix.checksOfColumn(h, column) == 0) {
+                noZeroColumn = false;
+            }
+        }
 
         System.out.println("\nprovera: " + (dependent && noZeroColumn ? "OK" : "GRESKA"));
     }
 
-    private static String bits(int vector, int length) {
-        StringBuilder text = new StringBuilder();
-
-        for (int position = 0; position < length; position++) {
-            text.append(ParityCheckMatrix.bit(vector, position));
-        }
-        return text.toString();
-    }
-
     private static String positions(int vector) {
-        StringBuilder text = new StringBuilder();
+        List<Integer> found = new ArrayList<>();
 
         for (int position = 0; position < N; position++) {
-            if (ParityCheckMatrix.bit(vector, position) == 1) {
-                if (!text.isEmpty()) {
-                    text.append(", ");
-                }
-                text.append(position);
+            if (Bits.get(vector, position) == 1) {
+                found.add(position);
             }
+        }
+        return join(found);
+    }
+
+    private static String join(List<Integer> values) {
+        StringBuilder text = new StringBuilder();
+
+        for (int value : values) {
+            if (!text.isEmpty()) {
+                text.append(", ");
+            }
+            text.append(value);
         }
         return text.toString();
     }
 
-    private static void printMatrix(long[] h) {
+    private static void printMatrix(int[] h) {
         System.out.println("H (" + ROWS + " x " + N + "):\n");
 
         for (int row = 0; row < ROWS; row++) {
             System.out.printf("red %d   ", row);
 
             for (int column = 0; column < N; column++) {
-                System.out.print(ParityCheckMatrix.bit(h[row], column) + " ");
+                System.out.print(Bits.get(h[row], column) + " ");
             }
             System.out.println();
         }
     }
 
-    private static void printWeightCheck(long[] h) {
+    private static void printWeightCheck(int[] h) {
         System.out.print("\ntezine redova:    ");
         boolean rowsOk = true;
-        for (long row : h) {
-            int weight = ParityCheckMatrix.rowWeight(row);
+        for (int row : h) {
+            int weight = Bits.weight(row);
             System.out.print(weight + " ");
             rowsOk = rowsOk && weight == ROW_WEIGHT;
         }

@@ -7,24 +7,20 @@ public final class GallagerB {
     private GallagerB() {
     }
 
-    public static int decode(long[] h, int n, int received, int maxIterations,
+    public static int decode(int[] h, int n, int received, int maxIterations,
                              double thresholdZero, double thresholdOne) {
         int current = received;
 
         for (int iteration = 0; iteration < maxIterations; iteration++) {
-            if (LinearCode.syndrome(h, current) == 0) {
+            if (isCodeword(h, current)) {
                 return current;
             }
             current = oneIteration(h, n, received, current, thresholdZero, thresholdOne);
         }
-
-        if (LinearCode.syndrome(h, current) == 0) {
-            return current;
-        }
-        return NOT_DECODED;
+        return isCodeword(h, current) ? current : NOT_DECODED;
     }
 
-    public static int oneIteration(long[] h, int n, int received, int current,
+    public static int oneIteration(int[] h, int n, int received, int current,
                                    double thresholdZero, double thresholdOne) {
         int next = 0;
 
@@ -32,31 +28,34 @@ public final class GallagerB {
             int votesForZero = 0;
             int votesForOne = 0;
 
-            for (int row = 0; row < h.length; row++) {
-                if (ParityCheckMatrix.bit(h[row], bit) == 0) {
+            for (int row : h) {
+                if (Bits.get(row, bit) == 0) {
                     continue;
                 }
 
-                if (messageToBit(h[row], current, bit) == 1) {
+                if (checkOpinion(row, current, bit) == 1) {
                     votesForOne++;
                 } else {
                     votesForZero++;
                 }
             }
 
-            int channelValue = ParityCheckMatrix.bit(received, bit);
+            int channelValue = Bits.get(received, bit);
             int value = decide(votesForZero, votesForOne, channelValue, thresholdZero, thresholdOne);
 
             if (value == 1) {
-                next = ParityCheckMatrix.setBit(next, bit);
+                next = Bits.set(next, bit);
             }
         }
         return next;
     }
 
-    private static int messageToBit(long row, int current, int bit) {
-        int rowParity = LinearCode.parity(row & current);
-        return rowParity ^ ParityCheckMatrix.bit(current, bit);
+    private static boolean isCodeword(int[] h, int vector) {
+        return LinearCode.syndrome(h, vector) == 0;
+    }
+
+    private static int checkOpinion(int row, int current, int bit) {
+        return Bits.parity(row & current) ^ Bits.get(current, bit);
     }
 
     private static int decide(int votesForZero, int votesForOne, int channelValue,
